@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Glitch-Hiker: The Chaotic Cosmos</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0d0d1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background: linear-gradient(to bottom, #0f0c20, #060411);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            max-width: 100%;
+            max-height: 100%;
+        }
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            text-align: center;
+            background: rgba(6, 4, 17, 0.85);
+            z-index: 10;
+        }
+        h1 {
+            font-size: 3rem;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff, 0 0 20px #ff00ff;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            color: #a0a0c0;
+        }
+        button {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ff00ff, #00ffff);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 0 15px #ff00ff;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px #00ffff;
+        }
+        #glitchNotifier {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff0055;
+            font-size: 1.8rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ff0055;
+            z-index: 5;
+            font-style: italic;
+            display: none;
+            animation: blink 0.5s infinite alternate;
+        }
+        @keyframes blink {
+            from { opacity: 1; } to { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <div id="glitchNotifier">GLITCH DETECTED!</div>
+        
+        <!-- Main Menu -->
+        <div id="mainMenu" class="overlay">
+            <h1>Glitch-Hiker</h1>
+            <p>The rules change every 10 seconds. Survive the cosmos.</p>
+            <button onclick="startGame()">START ADVENTURE</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="overlay" style="display: none;">
+            <h1 style="color: #ff0055; text-shadow: 0 0 10px #ff0055;">DIMENSION CRASHED</h1>
+            <p id="finalScore">Score: 0</p>
+            <button onclick="restartGame()">RESPAWN</button>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const glitchNotifier = document.getElementById('glitchNotifier');
+
+    // Base Responsive Resolution
+    const BASE_WIDTH = 800;
+    const BASE_HEIGHT = 450;
+    canvas.width = BASE_WIDTH;
+    canvas.height = BASE_HEIGHT;
+
+    // Game variables
+    let gameActive = false;
+    let score = 0;
+    let gameSpeed = 5;
+    let frameCount = 0;
+    let obstacles = [];
+    let particles = [];
+
+    // Glitch States
+    let currentGlitch = "NORMAL";
+    let glitchTimer = 0;
+    const GLITCH_DURATION = 500; // frames (~10 seconds)
+
+    // Player Object
+    const player = {
+        x: 100,
+        y: 300,
+        width: 40,
+        height: 40,
+        gravity: 0.6,
+        velocity: 0,
+        jumpForce: -12,
+        isGrounded: false,
+        color: '#00ffff'
+    };
+
+    // --- INPUT CONTROLS (PC & MOBILE) ---
+    function triggerAction() {
+        if (!gameActive) return;
+
+        // Glitch: Inverted Controls or Inverted Gravity changes the action
+        if (currentGlitch === "FLIPPED_GRAVITY") {
+            player.velocity = 10; // Push downwards
+        } else {
+            if (player.isGrounded || currentGlitch === "MATRIX_MODE") {
+                player.velocity = player.jumpForce;
+                player.isGrounded = false;
+                spawnParticles(player.x, player.y + player.height, '#00ffff', 10);
+            }
+        }
+    }
+
+    // PC Controls
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') triggerAction(); });
+    // Mobile & Mouse Controls
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); triggerAction(); }, {passive: false});
+    canvas.addEventListener('mousedown', () => { triggerAction(); });
+
+
+    // --- AD MANAGEMENT ZONE (MANUAL INTEGRATION) ---
+    function showInterstitialAd() {
+        console.log("👉 Ad Triggered Manually!");
+        
+        /* 
+           PASTE YOUR AD NETWORK CODE HERE.
+           Example for Google H5 Games Ads / Unity Web GL Ads:
+           
+           if (typeof adBreak !== 'undefined') {
+               adBreak({
+                   type: 'next',
+                   name: 'restart-game',
+                   beforeAd: () => { console.log("Ad playing..."); },
+                   afterAd: () => { console.log("Ad finished!"); }
+               });
+           }
+        */
+    }
+
+    // --- GAME ENGINE ---
+    function startGame() {
+        document.getElementById('mainMenu').style.display = 'none';
+        resetData();
+        gameActive = true;
+        animate();
+    }
+
+    function gameOver() {
+        gameActive = false;
+        document.getElementById('gameOverScreen').style.display = 'flex';
+        document.getElementById('finalScore').innerText = "You survived with a score of: " + score;
+        
+        // Call the manual ad insertion here when the player dies
+        showInterstitialAd();
+    }
+
+    function restartGame() {
+        document.getElementById('gameOverScreen').style.display = 'none';
+        resetData();
+        gameActive = true;
+        animate();
+    }
+
+    function resetData() {
+        score = 0;
+        gameSpeed = 6;
+        frameCount = 0;
+        obstacles = [];
+        particles = [];
+        currentGlitch = "NORMAL";
+        glitchNotifier.style.display = 'none';
+        player.y = 300;
+        player.velocity = 0;
+    }
+
+    // --- CHAOTIC GLITCH MANAGER (THE SURPRISES) ---
+    const glitches = ["NORMAL", "SPEED_DEMON", "FLIPPED_GRAVITY", "MATRIX_MODE", "UPSIDE_DOWN"];
+
+    function manageGlitches() {
+        glitchTimer++;
+        if (glitchTimer > GLITCH_DURATION) {
+            glitchTimer = 0;
+            // Pick a completely random new reality rule
+            const newGlitch = glitches[Math.floor(Math.random() * glitches.length)];
+            currentGlitch = newGlitch;
+
+            if (currentGlitch !== "NORMAL") {
+                glitchNotifier.innerText = `GLITCH: ${currentGlitch.replace('_', ' ')}!`;
+                glitchNotifier.style.display = 'block';
+                canvas.style.transform = currentGlitch === "UPSIDE_DOWN" ? "rotate(180deg)" : "rotate(0deg)";
+            } else {
+                glitchNotifier.style.display = 'none';
+                canvas.style.transform = "rotate(0deg)";
+            }
+        }
+    }
+
+    // --- PARTICLES ENGINE ---
+    function spawnParticles(x, y, color, count) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 6,
+                vy: (Math.random() - 0.5) * 6,
+                size: Math.random() * 4 + 2,
+                alpha: 1,
+                color: color
+            });
+        }
+    }
+
+    // --- MAIN GAME LOOP ---
+    function animate() {
+        if (!gameActive) return;
+        requestAnimationFrame(animate);
+        
+        // Clear screen
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        frameCount++;
+        score++;
+
+        manageGlitches();
+
+        // Adjust parameters based on active glitch
+        let localSpeed = gameSpeed;
+        let localGravity = player.gravity;
+
+        if (currentGlitch === "SPEED_DEMON") localSpeed = gameSpeed * 2.2;
+        if (currentGlitch === "MATRIX_MODE") { localSpeed = gameSpeed * 0.4; localGravity = player.gravity * 0.3; }
+        if (currentGlitch === "FLIPPED_GRAVITY") localGravity = -player.gravity;
+
+        // Speed ramp up over time
+        if (frameCount % 500 === 0) gameSpeed += 0.5;
+
+        // --- PLAYER PHYSICS ---
+        player.velocity += localGravity;
+        player.y += player.velocity;
+
+        // Ground/Ceiling bounds based on standard or inverted gravity
+        const floorY = canvas.height - player.height - 30;
+        const ceilingY = 30;
+
+        if (currentGlitch === "FLIPPED_GRAVITY") {
+            if (player.y <= ceilingY) {
+                player.y = ceilingY;
+                player.velocity = 0;
+                player.isGrounded = true;
+            }
+        } else {
+            if (player.y >= floorY) {
+                player.y = floorY;
+                player.velocity = 0;
+                player.isGrounded = true;
+            }
+        }
+
+        // Draw Ground and Ceiling Lines
+        ctx.strokeStyle = '#331a66';
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(0, floorY + player.height); ctx.lineTo(canvas.width, floorY + player.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, ceilingY); ctx.lineTo(canvas.width, ceilingY); ctx.stroke();
+
+        // Draw Player
+        ctx.fillStyle = currentGlitch === "NORMAL" ? player.color : '#ff00ff';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+        ctx.shadowBlur = 0; // reset
+
+        // Trail effect
+        if (frameCount % 3 === 0) spawnParticles(player.x, player.y + player.height/2, ctx.fillStyle, 1);
+
+        // --- OBSTACLE MANAGEMENT ---
+        if (frameCount % Math.floor(100 / (localSpeed / 5)) === 0) {
+            let obsY = floorY;
+            let obsHeight = Math.random() * 50 + 20;
+            
+            // Randomly spawn obstacles on the ceiling if gravity is flipped
+            if (currentGlitch === "FLIPPED_GRAVITY" && Math.random() > 0.4) {
+                obsY = ceilingY;
+            } else if (Math.random() > 0.7) {
+                // Wild surprise: Floating air obstacle
+                obsY = floorY - 80;
+                obsHeight = 30;
+            }
+
+            obstacles.push({
+                x: canvas.width,
+                y: obsY == ceilingY ? obsY : floorY - obsHeight + player.height,
+                width: 30,
+                height: obsHeight,
+                color: '#ff0055'
+            });
+        }
+
+        // Move and Draw Obstacles
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            obstacles[i].x -= localSpeed;
+
+            ctx.fillStyle = obstacles[i].color;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff0055';
+            ctx.fillRect(obstacles[i].x, obstacles[i].y, obstacles[i].width, obstacles[i].height);
+            ctx.shadowBlur = 0;
+
+            // Collision Detection
+            if (
+                player.x < obstacles[i].x + obstacles[i].width &&
+                player.x + player.width > obstacles[i].x &&
+                player.y < obstacles[i].y + obstacles[i].height &&
+                player.y + player.height > obstacles[i].y
+            ) {
+                spawnParticles(player.x, player.y, '#ff0055', 30);
+                gameOver();
+                return;
+            }
+
+            // Remove offscreen items
+            if (obstacles[i].x + obstacles[i].width < 0) {
+                obstacles.splice(i, 1);
+            }
+        }
+
+        // --- UPDATE PARTICLES ---
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].x += particles[i].vx;
+            particles[i].y += particles[i].vy;
+            particles[i].alpha -= 0.02;
+            if (particles[i].alpha <= 0) {
+                particles.splice(i, 1);
+            } else {
+                ctx.save();
+                ctx.globalAlpha = particles[i].alpha;
+                ctx.fillStyle = particles[i].color;
+                ctx.fillRect(particles[i].x, particles[i].y, particles[i].size, particles[i].size);
+                ctx.restore();
+            }
+        }
+
+        // --- DRAW HUD ---
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.fillText(`SCORE: ${score}`, 20, 40);
+        ctx.font = '14px sans-serif';
+        ctx.fillStyle = '#a0a0c0';
+        ctx.fillText(`REALITY MODE: ${currentGlitch}`, 20, 65);
+    }
+</script>
+</body>
+</html>
